@@ -200,5 +200,47 @@ class FabricShrinkageCalculationTest extends TestCase
             ],
         ]);
     }
+
+    /**
+     * Test bulk CSV import for multiple rolls at once.
+     */
+    public function test_bulk_csv_import_for_multiple_rolls(): void
+    {
+        $csvHeader = "roll_number,buyer,style,color,lot,quantity,stage,l1,l2,l3,w1,w2,w3\n";
+        $csvRow1 = "ROLL-BULK-01,Acme,Denim,Blue,LOT-A,1000,one,-3.20,-3.50,-3.10,-3.40,-3.80,-3.60\n";
+        $csvRow2 = "ROLL-BULK-02,Zara,Linen,White,LOT-B,500,one,-1.10,-0.90,-1.00,-0.70,-0.80,-0.60\n";
+        $csvContent = $csvHeader . $csvRow1 . $csvRow2;
+
+        $file = \Illuminate\Http\UploadedFile::fake()->createWithContent('rolls.csv', $csvContent);
+
+        $response = $this->postJson('/api/fabric-rolls/import-csv', [
+            'csv_file' => $file,
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('imported_count', 2);
+        $response->assertJsonPath('total_processed', 2);
+
+        $this->assertDatabaseHas('fabric_rolls', [
+            'roll_number' => 'ROLL-BULK-01',
+            'match_status' => 'matched',
+        ]);
+
+        $this->assertDatabaseHas('fabric_rolls', [
+            'roll_number' => 'ROLL-BULK-02',
+            'match_status' => 'matched',
+        ]);
+    }
+
+    /**
+     * Test sample CSV download endpoint.
+     */
+    public function test_sample_csv_download_endpoint(): void
+    {
+        $response = $this->get('/api/fabric-rolls/sample-csv');
+        $response->assertStatus(200);
+        $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
+        $response->assertSee('roll_number,buyer,style,color,lot,quantity,stage,l1,l2,l3,w1,w2,w3');
+    }
 }
 

@@ -11,6 +11,7 @@ use App\Models\FabricRoll;
 use App\Services\ShrinkageClassificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FabricRollController extends Controller
 {
@@ -229,6 +230,160 @@ class FabricRollController extends Controller
                 ],
             ],
         ]);
+    }
+
+    /**
+     * Bulk import multiple fabric rolls from CSV.
+     */
+    public function importCsv(Request $request): JsonResponse
+    {
+        $request->validate([
+            'csv_file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
+        ]);
+
+        $file = $request->file('csv_file');
+        if (!$file) {
+            return response()->json(['message' => 'No file uploaded.'], 422);
+        }
+
+        $handle = fopen($file->getRealPath(), 'r');
+        if ($handle === false) {
+            return response()->json(['message' => 'Unable to read the uploaded CSV file.'], 500);
+        }
+
+        $header = fgetcsv($handle);
+        if (!$header) {
+            fclose($handle);
+            return response()->json(['message' => 'The uploaded CSV file is empty.'], 422);
+        }
+
+        // Map header indices
+        $headerMap = [];
+        foreach ($header as $index => $colName) {
+            $cleaned = strtolower(trim((string) $colName));
+            $headerMap[$cleaned] = $index;
+        }
+
+        $requiredCols = ['roll_number', 'buyer', 'style', 'color', 'lot', 'quantity', 'l1', 'l2', 'l3', 'w1', 'w2', 'w3'];
+        foreach ($requiredCols as $col) {
+            if (!array_key_exists($col, $headerMap)) {
+                fclose($handle);
+                return response()->json([
+                    'message' => "Missing required CSV column: '{$col}'. Required columns are: " . implode(', ', $requiredCols) . ', stage',
+                ], 422);
+            }
+        }
+
+        $imported = 0;
+        $updated = 0;
+        $errors = [];
+        $rowNumber = 1;
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $rowNumber++;
+            if (empty(array_filter($row, fn ($val) => trim((string) $val) !== ''))) {
+                continue; // Skip empty rows
+            }
+
+            $getVal = fn (string $key, string $default = ''): string => isset($headerMap[$key], $row[$headerMap[$key]]) ? trim((string) $row[$headerMap[$key]]) : $default;
+
+            $rollNumber = $getVal('roll_number');
+            $buyer = $getVal('buyer');
+            $style = $getVal('style');
+            $color = $getVal('color');
+            $lot = $getVal('lot');
+            $quantityStr = $getVal('quantity');
+            $stage = $getVal('stage', 'one') ?: 'one';
+            $l1Str = $getVal('l1');
+            $l2Str = $getVal('l2');
+            $l3Str = $getVal('l3');
+            $w1Str = $getVal('w1');
+            $w2Str = $getVal('w2');
+            $w3Str = $getVal('w3');
+
+            if ($rollNumber === '') {
+                $errors[] = "Row {$rowNumber}: Missing roll_number.";
+                continue;
+            }
+
+            if (!is_numeric($quantityStr) || !is_numeric($l1Str) || !is_numeric($l2Str) || !is_numeric($l3Str) || !is_numeric($w1Str) || !is_numeric($w2Str) || !is_numeric($w3Str)) {
+                $errors[] = "Row {$rowNumber} (Roll '{$rollNumber}'): Quantity and all 6 percentage readings (l1, l2, l3, w1, w2, w3) must be numeric.";
+                continue;
+            }
+
+            $l1 = (float) $l1Str;
+            $l2 = (float) $l2Str;
+            $l3 = (float) $l3Str;
+            $w1 = (float) $w1Str;
+            $w2 = (float) $w2Str;
+            $w3 = (float) $w3Str;
+            $quantity = (float) $quantityStr;
+
+            $classification = $this->classificationService->classify($l1, $l2, $l3, $w1, $w2, $w3, $stage);
+
+            $existingRoll = FabricRoll::where('roll_number', $rollNumber)->first();
+            $isNew = !$existingRoll;
+
+            FabricRoll::updateOrCreate(
+                ['roll_number' => $rollNumber],
+                [
+                    'buyer' => $buyer,
+                    'style' => $style,
+                    'color' => $color,
+                    'lot' => $lot,
+                    'quantity' => $quantity,
+                    'stage' => $stage,
+                    'measurement_mode' => 'direct_percentage',
+                    'l1' => $l1,
+                    'l2' => $l2,
+                    'l3' => $l3,
+                    'w1' => $w1,
+                    'w2' => $w2,
+                    'w3' => $w3,
+                    'avg_length' => $classification['avg_length'],
+                    'avg_width' => $classification['avg_width'],
+                    'match_status' => $classification['match_status'],
+                    'matched_group_id' => $classification['matched_group']?->id,
+                    'matching_candidates' => $classification['matching_candidates'],
+                ]
+            );
+
+            if ($isNew) {
+                $imported++;
+            } else {
+                $updated++;
+            }
+        }
+
+        fclose($handle);
+
+        return response()->json([
+            'message' => "CSV import complete: {$imported} rolls added, {$updated} updated.",
+            'imported_count' => $imported,
+            'updated_count' => $updated,
+            'total_processed' => $imported + $updated,
+            'errors' => $errors,
+        ]);
+    }
+
+    /**
+     * Download a sample CSV template for fabric rolls.
+     */
+    public function downloadSampleCsv(): StreamedResponse
+    {
+        $headers = [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="fabric_rolls_template.csv"',
+        ];
+
+        return response()->stream(function () {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, ['roll_number', 'buyer', 'style', 'color', 'lot', 'quantity', 'stage', 'l1', 'l2', 'l3', 'w1', 'w2', 'w3']);
+            fputcsv($handle, ['ROLL-BATCH-001', 'Acme Corp', 'Denim 501', 'Dark Indigo', 'LOT-501', '1250.00', 'one', '-3.20', '-3.50', '-3.10', '-3.40', '-3.80', '-3.60']);
+            fputcsv($handle, ['ROLL-BATCH-002', 'Zara', 'Linen Shirt', 'Optic White', 'LOT-502', '840.50', 'one', '-1.10', '-0.90', '-1.00', '-0.70', '-0.80', '-0.60']);
+            fputcsv($handle, ['ROLL-BATCH-003', 'H&M', 'Chino Pants', 'Khaki', 'LOT-503', '2100.00', 'one', '-1.20', '-1.50', '-0.90', '-3.60', '-3.80', '-3.70']);
+            fclose($handle);
+        }, 200, $headers);
     }
 }
 

@@ -80,6 +80,7 @@
         <roll-entry-form
           :edit-roll="editingRoll"
           @roll-saved="handleRollSaved"
+          @rolls-imported="handleRollsImported"
           @cancel-edit="editingRoll = null"
         />
 
@@ -209,6 +210,11 @@ export default {
     handleRollSaved(savedRoll) {
       this.editingRoll = null;
       this.showToast(`Roll ${savedRoll.roll_number} saved successfully!`);
+      this.fetchRolls();
+      this.fetchStats();
+    },
+    handleRollsImported(result) {
+      this.showToast(result.message || 'Multiple fabric rolls imported successfully!');
       this.fetchRolls();
       this.fetchStats();
     },

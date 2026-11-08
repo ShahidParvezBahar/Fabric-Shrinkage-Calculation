@@ -1,18 +1,43 @@
 <template>
   <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+    <!-- Card Header -->
     <div class="px-6 py-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white flex flex-wrap items-center justify-between gap-3">
       <div>
         <h3 class="font-bold text-base flex items-center gap-2">
           <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
-          {{ isEditing ? 'Edit Fabric Roll: ' + form.roll_number : 'New Fabric Roll Entry & Calculation' }}
+          {{ isEditing ? 'Edit Fabric Roll: ' + form.roll_number : 'Fabric Roll Entry & Shrinkage Calculation' }}
         </h3>
-        <p class="text-xs text-slate-300">Enter roll metadata and readings. Matching group is computed in real time.</p>
+        <p class="text-xs text-slate-300">Record single rolls or upload multiple rolls at once via CSV.</p>
       </div>
 
       <div class="flex items-center gap-2">
+        <!-- Entry Type Switcher -->
+        <div v-if="!isEditing" class="inline-flex rounded-xl bg-slate-800/80 p-1 border border-slate-700 text-xs font-semibold">
+          <button
+            type="button"
+            @click="activeEntryTab = 'manual'"
+            :class="activeEntryTab === 'manual' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:text-white'"
+            class="px-3 py-1.5 rounded-lg transition"
+          >
+            Manual Entry
+          </button>
+          <button
+            type="button"
+            @click="activeEntryTab = 'bulk'"
+            :class="activeEntryTab === 'bulk' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:text-white'"
+            class="px-3 py-1.5 rounded-lg transition flex items-center gap-1.5"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Bulk CSV Upload
+          </button>
+        </div>
+
         <button
+          v-if="activeEntryTab === 'manual' && !isEditing"
           @click="loadWorkedExample"
           type="button"
           class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/80 hover:bg-indigo-600 text-white text-xs font-semibold rounded-lg transition border border-indigo-400/30 shadow-sm"
@@ -35,7 +60,8 @@
       </div>
     </div>
 
-    <form @submit.prevent="handleSubmit" class="p-6 space-y-6">
+    <!-- TAB 1: MANUAL SINGLE ROLL ENTRY -->
+    <form v-if="activeEntryTab === 'manual'" @submit.prevent="handleSubmit" class="p-6 space-y-6">
       <!-- Error Alert -->
       <div v-if="errorMessage" class="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-3">
         <svg class="w-5 h-5 text-rose-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -399,6 +425,127 @@
         </button>
       </div>
     </form>
+
+    <!-- TAB 2: BULK CSV UPLOAD SECTION -->
+    <div v-else class="p-6 space-y-6">
+      <div class="bg-indigo-50/60 rounded-2xl border border-indigo-100 p-5 flex flex-wrap items-center justify-between gap-4">
+        <div class="space-y-1">
+          <h4 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+            <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Bulk Roll Import Guidelines
+          </h4>
+          <p class="text-xs text-slate-600">
+            Upload a CSV containing multiple rolls. Each roll's average length and width will be calculated, matched to the shrinkage group chart, and saved into the database.
+          </p>
+        </div>
+
+        <a
+          :href="sampleCsvUrl"
+          download="fabric_rolls_template.csv"
+          class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-50 text-indigo-700 font-bold text-xs rounded-xl border border-indigo-200 transition shadow-sm"
+        >
+          <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Download Sample CSV Template
+        </a>
+      </div>
+
+      <!-- File Drop Area -->
+      <div
+        @dragover.prevent="isDragging = true"
+        @dragleave.prevent="isDragging = false"
+        @drop.prevent="handleFileDrop"
+        :class="isDragging ? 'border-indigo-500 bg-indigo-50/40' : 'border-slate-300 hover:border-indigo-400 bg-slate-50/50'"
+        class="border-2 border-dashed rounded-2xl p-8 text-center transition cursor-pointer"
+        @click="$refs.csvFileInput.click()"
+      >
+        <input
+          ref="csvFileInput"
+          type="file"
+          accept=".csv, text/csv, text/plain"
+          @change="onFileSelected"
+          class="hidden"
+        />
+
+        <div class="max-w-sm mx-auto space-y-3">
+          <div class="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 mx-auto flex items-center justify-center">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+          </div>
+
+          <div v-if="selectedCsvFile">
+            <p class="text-sm font-bold text-indigo-950">{{ selectedCsvFile.name }}</p>
+            <p class="text-xs text-slate-500">{{ (selectedCsvFile.size / 1024).toFixed(1) }} KB</p>
+          </div>
+          <div v-else>
+            <p class="text-sm font-semibold text-slate-700">
+              Drag & Drop your fabric rolls CSV file here, or <span class="text-indigo-600 font-bold underline">browse</span>
+            </p>
+            <p class="text-xs text-slate-400">Supports .csv files up to 10MB</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Expected CSV Columns Table -->
+      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div class="px-4 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold uppercase tracking-wider">
+          Expected CSV Columns (in any order):
+        </div>
+        <div class="p-4 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 text-xs">
+          <span class="p-1.5 rounded-lg bg-slate-50 border border-slate-200 font-mono text-center">roll_number *</span>
+          <span class="p-1.5 rounded-lg bg-slate-50 border border-slate-200 font-mono text-center">buyer *</span>
+          <span class="p-1.5 rounded-lg bg-slate-50 border border-slate-200 font-mono text-center">style *</span>
+          <span class="p-1.5 rounded-lg bg-slate-50 border border-slate-200 font-mono text-center">color *</span>
+          <span class="p-1.5 rounded-lg bg-slate-50 border border-slate-200 font-mono text-center">lot *</span>
+          <span class="p-1.5 rounded-lg bg-slate-50 border border-slate-200 font-mono text-center">quantity *</span>
+          <span class="p-1.5 rounded-lg bg-slate-50 border border-slate-200 font-mono text-center">stage (default: one)</span>
+          <span class="p-1.5 rounded-lg bg-blue-50 border border-blue-200 font-mono text-blue-900 text-center">l1 *</span>
+          <span class="p-1.5 rounded-lg bg-blue-50 border border-blue-200 font-mono text-blue-900 text-center">l2 *</span>
+          <span class="p-1.5 rounded-lg bg-blue-50 border border-blue-200 font-mono text-blue-900 text-center">l3 *</span>
+          <span class="p-1.5 rounded-lg bg-emerald-50 border border-emerald-200 font-mono text-emerald-900 text-center">w1 *</span>
+          <span class="p-1.5 rounded-lg bg-emerald-50 border border-emerald-200 font-mono text-emerald-900 text-center">w2 *</span>
+          <span class="p-1.5 rounded-lg bg-emerald-50 border border-emerald-200 font-mono text-emerald-900 text-center">w3 *</span>
+        </div>
+      </div>
+
+      <!-- Upload Button & Result Alerts -->
+      <div class="flex items-center justify-between pt-2">
+        <div v-if="csvUploadResult" class="text-xs">
+          <span class="text-emerald-700 font-bold">{{ csvUploadResult.message }}</span>
+        </div>
+        <div v-else-if="csvUploadError" class="text-xs text-rose-600 font-bold">
+          {{ csvUploadError }}
+        </div>
+        <div v-else></div>
+
+        <button
+          @click="submitBulkCsv"
+          :disabled="!selectedCsvFile || isUploadingCsv"
+          type="button"
+          class="px-6 py-2.5 text-sm font-bold rounded-xl text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 transition shadow-sm flex items-center gap-2"
+        >
+          <svg v-if="isUploadingCsv" class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+          </svg>
+          <span>{{ isUploadingCsv ? 'Processing & Classifying...' : 'Upload & Process CSV' }}</span>
+        </button>
+      </div>
+
+      <!-- Row Errors Alert (if any) -->
+      <div v-if="csvUploadResult?.errors && csvUploadResult.errors.length" class="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-1">
+        <div class="font-bold flex items-center gap-1.5">
+          <span>⚠️ Warning: Some rows were skipped due to formatting errors:</span>
+        </div>
+        <ul class="list-disc list-inside space-y-0.5">
+          <li v-for="(err, idx) in csvUploadResult.errors" :key="idx">{{ err }}</li>
+        </ul>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -413,9 +560,10 @@ export default {
       default: null,
     },
   },
-  emits: ['roll-saved', 'cancel-edit'],
+  emits: ['roll-saved', 'rolls-imported', 'cancel-edit'],
   data() {
     return {
+      activeEntryTab: 'manual', // 'manual' or 'bulk'
       form: {
         roll_number: '',
         buyer: '',
@@ -449,11 +597,21 @@ export default {
       errorMessage: null,
       validationErrors: [],
       debounceTimeout: null,
+
+      // Bulk CSV Data
+      selectedCsvFile: null,
+      isDragging: false,
+      isUploadingCsv: false,
+      csvUploadResult: null,
+      csvUploadError: null,
     };
   },
   computed: {
     isEditing() {
       return !!this.editRoll;
+    },
+    sampleCsvUrl() {
+      return apiUrl('fabric-rolls/sample-csv');
     },
     liveAvgLength() {
       const { l1, l2, l3 } = this.form;
@@ -501,6 +659,7 @@ export default {
       immediate: true,
       handler(newVal) {
         if (newVal) {
+          this.activeEntryTab = 'manual';
           this.form = {
             roll_number: newVal.roll_number,
             buyer: newVal.buyer,
@@ -558,10 +717,6 @@ export default {
       this.onReadingsChange();
     },
     loadWorkedExample() {
-      // Worked example from Section 6 of prompt:
-      // Length (%): -3.20, -3.50, -3.10 => Avg: -3.27
-      // Width (%): -3.40, -3.80, -3.60 => Avg: -3.60
-      // Expected result: Group 23, stage "one".
       this.form = {
         roll_number: 'ROLL-EX-23',
         buyer: 'Acme Apparel',
@@ -681,7 +836,62 @@ export default {
       this.validationErrors = [];
       this.triggerPreview();
     },
+
+    // Bulk CSV Upload Methods
+    onFileSelected(event) {
+      const file = event.target.files[0];
+      if (file) {
+        this.selectedCsvFile = file;
+        this.csvUploadResult = null;
+        this.csvUploadError = null;
+      }
+    },
+    handleFileDrop(event) {
+      this.isDragging = false;
+      const file = event.dataTransfer.files[0];
+      if (file && (file.name.endsWith('.csv') || file.type.includes('csv') || file.type.includes('text'))) {
+        this.selectedCsvFile = file;
+        this.csvUploadResult = null;
+        this.csvUploadError = null;
+      }
+    },
+    async submitBulkCsv() {
+      if (!this.selectedCsvFile) return;
+
+      this.isUploadingCsv = true;
+      this.csvUploadResult = null;
+      this.csvUploadError = null;
+
+      const formData = new FormData();
+      formData.append('csv_file', this.selectedCsvFile);
+
+      try {
+        const response = await fetch(apiUrl('fabric-rolls/import-csv'), {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+          },
+          body: formData,
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          this.csvUploadResult = data;
+          this.$emit('rolls-imported', data);
+          this.selectedCsvFile = null;
+          if (this.$refs.csvFileInput) {
+            this.$refs.csvFileInput.value = '';
+          }
+        } else {
+          this.csvUploadError = data.message || 'CSV upload failed.';
+        }
+      } catch (err) {
+        this.csvUploadError = 'Network error during CSV upload.';
+      } finally {
+        this.isUploadingCsv = false;
+      }
+    },
   },
 };
 </script>
-

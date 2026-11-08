@@ -13,5 +13,7 @@ Route::prefix('shrinkage-groups')->group(function () {
 });
 
 Route::get('fabric-rolls/stats', [FabricRollController::class, 'stats']);
+Route::get('fabric-rolls/sample-csv', [FabricRollController::class, 'downloadSampleCsv']);
+Route::post('fabric-rolls/import-csv', [FabricRollController::class, 'importCsv']);
 Route::apiResource('fabric-rolls', FabricRollController::class);
 
