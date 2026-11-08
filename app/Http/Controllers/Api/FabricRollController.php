@@ -127,32 +127,40 @@ class FabricRollController extends Controller
     {
         $validated = $request->validated();
 
+        $stage = (string) ($validated['stage'] ?? $fabricRoll->stage ?? 'one');
+        $l1 = (float) $validated['l1'];
+        $l2 = (float) $validated['l2'];
+        $l3 = (float) $validated['l3'];
+        $w1 = (float) $validated['w1'];
+        $w2 = (float) $validated['w2'];
+        $w3 = (float) $validated['w3'];
+
         $classification = $this->classificationService->classify(
-            (float) $validated['l1'],
-            (float) $validated['l2'],
-            (float) $validated['l3'],
-            (float) $validated['w1'],
-            (float) $validated['w2'],
-            (float) $validated['w3'],
-            (string) ($validated['stage'] ?? 'one')
+            $l1,
+            $l2,
+            $l3,
+            $w1,
+            $w2,
+            $w3,
+            $stage
         );
 
         $fabricRoll->update([
-            'roll_number' => $validated['roll_number'],
-            'buyer' => $validated['buyer'],
-            'style' => $validated['style'],
-            'color' => $validated['color'],
-            'lot' => $validated['lot'],
-            'quantity' => (float) $validated['quantity'],
-            'stage' => $validated['stage'] ?? 'one',
-            'measurement_mode' => $validated['measurement_mode'] ?? 'direct_percentage',
-            'l1' => (float) $validated['l1'],
-            'l2' => (float) $validated['l2'],
-            'l3' => (float) $validated['l3'],
-            'w1' => (float) $validated['w1'],
-            'w2' => (float) $validated['w2'],
-            'w3' => (float) $validated['w3'],
-            'raw_measurements' => $validated['raw_measurements'] ?? null,
+            'roll_number' => $validated['roll_number'] ?? $fabricRoll->roll_number,
+            'buyer' => $validated['buyer'] ?? $fabricRoll->buyer,
+            'style' => $validated['style'] ?? $fabricRoll->style,
+            'color' => $validated['color'] ?? $fabricRoll->color,
+            'lot' => $validated['lot'] ?? $fabricRoll->lot,
+            'quantity' => isset($validated['quantity']) ? (float) $validated['quantity'] : (float) $fabricRoll->quantity,
+            'stage' => $stage,
+            'measurement_mode' => $validated['measurement_mode'] ?? $fabricRoll->measurement_mode,
+            'l1' => $l1,
+            'l2' => $l2,
+            'l3' => $l3,
+            'w1' => $w1,
+            'w2' => $w2,
+            'w3' => $w3,
+            'raw_measurements' => $validated['raw_measurements'] ?? $fabricRoll->raw_measurements,
             'avg_length' => $classification['avg_length'],
             'avg_width' => $classification['avg_width'],
             'match_status' => $classification['match_status'],

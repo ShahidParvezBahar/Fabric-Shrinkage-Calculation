@@ -233,6 +233,58 @@ class FabricShrinkageCalculationTest extends TestCase
     }
 
     /**
+     * Test updating readings recalculates averages and updates group classification.
+     */
+    public function test_updating_roll_readings_recalculates_averages_and_reclassifies_group(): void
+    {
+        // 1. Create roll initially matching Group 23
+        $roll = FabricRoll::create([
+            'roll_number' => 'ROLL-UPDATE-TEST',
+            'buyer' => 'Test Buyer',
+            'style' => 'Test Style',
+            'color' => 'Navy',
+            'lot' => 'LOT-01',
+            'quantity' => 100,
+            'stage' => 'one',
+            'measurement_mode' => 'direct_percentage',
+            'l1' => -3.20,
+            'l2' => -3.50,
+            'l3' => -3.10,
+            'w1' => -3.40,
+            'w2' => -3.80,
+            'w3' => -3.60,
+            'avg_length' => -3.266667,
+            'avg_width' => -3.600000,
+            'match_status' => 'matched',
+            'matched_group_id' => ShrinkageGroup::where('group_number', '23')->value('id'),
+        ]);
+
+        // 2. Update readings to match Group 1 (L: -1.00%, W: -0.70%)
+        $response = $this->putJson("/api/fabric-rolls/{$roll->id}", [
+            'l1' => -1.10,
+            'l2' => -0.90,
+            'l3' => -1.00,
+            'w1' => -0.70,
+            'w2' => -0.80,
+            'w3' => -0.60,
+        ]);
+
+        $response->assertStatus(200);
+        $response->assertJsonPath('data.match_status', 'matched');
+        $response->assertJsonPath('data.matched_group.group_number', '1');
+
+        $data = $response->json('data');
+        $this->assertEquals(-1.00, round($data['avg_length'], 2));
+        $this->assertEquals(-0.70, round($data['avg_width'], 2));
+
+        $this->assertDatabaseHas('fabric_rolls', [
+            'id' => $roll->id,
+            'l1' => -1.10,
+            'match_status' => 'matched',
+        ]);
+    }
+
+    /**
      * Test sample CSV download endpoint.
      */
     public function test_sample_csv_download_endpoint(): void
