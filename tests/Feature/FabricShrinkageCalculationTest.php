@@ -240,7 +240,7 @@ class FabricShrinkageCalculationTest extends TestCase
         $response = $this->get('/api/fabric-rolls/sample-csv');
         $response->assertStatus(200);
         $response->assertHeader('Content-Type', 'text/csv; charset=UTF-8');
-        $response->assertSee('roll_number,buyer,style,color,lot,quantity,stage,l1,l2,l3,w1,w2,w3');
+        $this->assertStringContainsString('roll_number,buyer,style,color,lot,quantity,stage,l1,l2,l3,w1,w2,w3', $response->streamedContent());
     }
 }
 
